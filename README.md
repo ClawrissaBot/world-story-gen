@@ -1,32 +1,30 @@
 # 🌍 World Story Gen
 
-A turn-based world history generator. Draw shapes on a map to define regions, then simulate civilizations evolving through the ages.
+A turn-based world history generator. Draw shapes on a map, describe your world's lore with AI, then simulate civilizations evolving through the ages.
 
-## Concept
+## How to Play
 
-1. **Draw** — Sketch landmasses, regions, and territories on a canvas
-2. **Configure Ages** — Pick which ages to simulate through (or create custom ones)
-3. **Simulate** — Step turn-by-turn as civilizations rise, expand, clash, and fall
-4. **Watch** — See borders shift, cities emerge, and history unfold
+1. **Open `index.html`** in a browser (no server needed)
+2. **Draw regions** — click to place polygon points, click near the first point to close
+3. **Chat with the AI** — describe your world's gods, creatures, magic in the lore panel (needs OpenRouter API key)
+4. **Start simulation** — watch civilizations advance through ages, fight wars, and experience events
 
-## Default Ages
+## Features
 
-- 🪨 Stone Age
-- 🏺 Bronze Age
-- ⚔️ Iron Age
-- 🏛️ Classical Age
-- 🏰 Medieval Age
-- ⛵ Age of Exploration
-- 🏭 Industrial Age
-- 💡 Modern Age
-- 🚀 Information Age
+- 🗺️ **Map Drawing** — polygon-based region creation with colors and names
+- 📜 **World Lore AI** — chat-powered world-building via OpenRouter (Qwen 3 235B)
+- 🎲 **10% Age Regression** — every advancement attempt has a 10% chance to FALL BACK one age instead
+- 🎬 **Dice Roll Animation** — see the roll result when stepping manually
+- ⚔️ **Conflicts** — civilizations clash at borders, can conquer each other
+- 🌋 **Random Events** — disasters, golden ages, discoveries (flavored by your lore)
+- 📊 **History Timeline** — complete event log with world summary
 
-Custom ages can be added with configurable tech/culture milestones.
+## Ages
 
-## Tech Stack
+🪨 Stone → 🏺 Bronze → ⚔️ Iron → 🏛️ Classical → 🏰 Medieval → ⛵ Exploration → 🏭 Industrial → 💡 Modern → 🚀 Information
 
-TBD — to be discussed in #world-story-gen
+## Tech
 
-## Status
+Pure HTML/CSS/JS — no build tools, no dependencies, just open and play.
 
-🚧 Project scaffolding — design phase
+AI chat requires an [OpenRouter](https://openrouter.ai) API key (prompted on first use).
