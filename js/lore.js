@@ -40,7 +40,7 @@ class LoreChat {
           'X-Title': 'World Story Gen'
         },
         body: JSON.stringify({
-          model: 'qwen/qwen3-235b-a22b',
+          model: 'qwen/qwen3.6-plus:free',
           messages: [
             { role: 'system', content: this.systemPrompt },
             ...this.messages.slice(-20) // Keep last 20 messages for context
