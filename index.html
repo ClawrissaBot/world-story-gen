@@ -80,8 +80,14 @@
           <button id="btn-back-create" class="btn btn-secondary">← Back</button>
         </div>
         <div class="sim-info">
-          <h3>Turn <span id="turn-counter">0</span></h3>
+          <h3>Turn <span id="turn-counter">0</span> · Pop: <span id="total-pop">0</span></h3>
           <div id="civ-list" class="civ-list"></div>
+        </div>
+        <div class="settlement-detail hidden" id="settlement-detail">
+          <h4 id="detail-title">Settlement</h4>
+          <div id="detail-resources" class="detail-section"></div>
+          <div id="detail-people" class="detail-section"></div>
+          <button class="btn btn-secondary btn-small" id="btn-close-detail">✕ Close</button>
         </div>
         <div class="event-log">
           <h4>📋 Events</h4>
@@ -112,6 +118,10 @@
   </div>
 
   <script src="js/ages.js"></script>
+  <script src="js/resources.js"></script>
+  <script src="js/people.js"></script>
+  <script src="js/settlements.js"></script>
+  <script src="js/trade.js"></script>
   <script src="js/history.js"></script>
   <script src="js/lore.js"></script>
   <script src="js/map.js"></script>

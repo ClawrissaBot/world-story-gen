@@ -4,6 +4,7 @@ let mapEditor = null;
 let simulation = null;
 let simCanvas = null;
 let simCtx = null;
+let selectedSettlement = null;
 
 // === Screen Management ===
 function showScreen(id) {
@@ -80,23 +81,19 @@ async function sendLoreMessage() {
   input.value = '';
   const messagesEl = document.getElementById('lore-messages');
   
-  // Add user message
   const userMsg = document.createElement('div');
   userMsg.className = 'lore-msg user';
   userMsg.textContent = text;
   messagesEl.appendChild(userMsg);
   
-  // Loading indicator
   const loadingMsg = document.createElement('div');
   loadingMsg.className = 'lore-msg loading';
   loadingMsg.textContent = '🔮 Thinking...';
   messagesEl.appendChild(loadingMsg);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   
-  // Send to AI
   const reply = await loreChat.sendMessage(text);
   
-  // Replace loading with response
   loadingMsg.className = 'lore-msg assistant';
   loadingMsg.textContent = reply;
   messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -122,7 +119,7 @@ document.getElementById('btn-start-sim').addEventListener('click', () => {
   const loreKeywords = loreChat.getLoreKeywords();
   
   simulation = new Simulation(regions, loreSummary, loreKeywords);
-  worldHistory.events = []; // Reset history
+  worldHistory.events = [];
   
   showScreen('screen-sim');
   initSimView();
@@ -142,7 +139,78 @@ function resizeSimCanvas() {
 function initSimView() {
   resizeSimCanvas();
   updateSimUI([]);
+  
+  // Click on canvas to select settlement
+  simCanvas.addEventListener('click', (e) => {
+    if (!simulation) return;
+    const rect = simCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Find nearest settlement
+    let nearest = null;
+    let nearestDist = 30; // Click radius
+    for (const s of simulation.allSettlements) {
+      const dist = Math.hypot(s.position.x - x, s.position.y - y);
+      if (dist < nearestDist) {
+        nearest = s;
+        nearestDist = dist;
+      }
+    }
+    
+    if (nearest) {
+      selectedSettlement = nearest;
+      showSettlementDetail(nearest);
+    } else {
+      selectedSettlement = null;
+      document.getElementById('settlement-detail').classList.add('hidden');
+    }
+  });
 }
+
+function showSettlementDetail(s) {
+  const detail = document.getElementById('settlement-detail');
+  detail.classList.remove('hidden');
+  
+  document.getElementById('detail-title').textContent = `${s.tier.emoji} ${s.name} (${s.tier.name})`;
+  
+  // Resources
+  const resHtml = Object.values(s.resources).map(r => 
+    `<span class="res-tag">${r.emoji} ${r.name} ×${r.abundance}</span>`
+  ).join(' ');
+  document.getElementById('detail-resources').innerHTML = `
+    <div class="detail-label">Resources</div>
+    <div class="res-tags">${resHtml}</div>
+    <div class="detail-stats">
+      👥 ${formatPop(s.population)} · 🍞 ${s.foodStore} · 🪵 ${s.materialStore} · 💰 ${s.wealthStore} · 🏛️ ${s.culture}
+    </div>
+    <div class="detail-stats">
+      🛡️ Defense: ${Math.floor(s.defense)} · 🤝 Trade routes: ${s.tradeRoutes.length}
+    </div>
+  `;
+  
+  // People (show first 20 alive)
+  const alive = s.people.filter(p => p.alive).slice(0, 20);
+  const peopleHtml = alive.map(p => {
+    const notable = p.notable ? ' ⭐' : '';
+    return `<div class="person-row${p.notable ? ' notable' : ''}">
+      ${p.roleEmoji} <strong>${p.name}</strong>${notable} — ${p.role}, age ${p.age}
+      ${p.deeds.length > 0 ? `<br><small class="deed">"${p.deeds[p.deeds.length-1].text}"</small>` : ''}
+    </div>`;
+  }).join('');
+  
+  const hidden = s.people.filter(p => p.alive).length - alive.length;
+  document.getElementById('detail-people').innerHTML = `
+    <div class="detail-label">Notable Citizens (${s.people.filter(p=>p.alive).length} tracked / ${formatPop(s.population)} total)</div>
+    ${peopleHtml}
+    ${hidden > 0 ? `<div class="person-row dim">...and ${hidden} more</div>` : ''}
+  `;
+}
+
+document.getElementById('btn-close-detail').addEventListener('click', () => {
+  selectedSettlement = null;
+  document.getElementById('settlement-detail').classList.add('hidden');
+});
 
 function renderSimMap() {
   if (!simCtx || !simulation) return;
@@ -164,12 +232,10 @@ function renderSimMap() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
   }
   
-  // Draw civilizations
+  // Draw civ territories
   for (const civ of simulation.civilizations) {
-    const alpha = civ.alive ? '66' : '22';
-    const borderAlpha = civ.alive ? 'cc' : '44';
+    const alpha = civ.alive ? '44' : '15';
     
-    // Fill region
     ctx.fillStyle = civ.color + alpha;
     ctx.beginPath();
     ctx.moveTo(civ.points[0].x, civ.points[0].y);
@@ -179,58 +245,109 @@ function renderSimMap() {
     ctx.closePath();
     ctx.fill();
     
-    // Border
-    ctx.strokeStyle = civ.color + borderAlpha;
-    ctx.lineWidth = civ.alive ? 3 : 1;
+    ctx.strokeStyle = civ.color + (civ.alive ? '88' : '33');
+    ctx.lineWidth = 2;
     ctx.stroke();
+  }
+  
+  // Draw trade routes
+  ctx.strokeStyle = '#ffffff22';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  const drawnRoutes = new Set();
+  for (const s of simulation.allSettlements) {
+    for (const partnerId of s.tradeRoutes) {
+      const key = [Math.min(s.id, partnerId), Math.max(s.id, partnerId)].join('-');
+      if (drawnRoutes.has(key)) continue;
+      drawnRoutes.add(key);
+      const partner = simulation.allSettlements.find(x => x.id === partnerId);
+      if (!partner) continue;
+      ctx.beginPath();
+      ctx.moveTo(s.position.x, s.position.y);
+      ctx.lineTo(partner.position.x, partner.position.y);
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  
+  // Draw settlements
+  for (const civ of simulation.civilizations) {
+    if (!civ.alive) continue;
+    const age = getAge(civ.ageIndex);
     
-    // Territory size indicator (pulsing glow based on territory)
-    if (civ.alive) {
-      const glowRadius = 20 + civ.territory * 3;
-      const gradient = ctx.createRadialGradient(civ.center.x, civ.center.y, 0, civ.center.x, civ.center.y, glowRadius);
-      gradient.addColorStop(0, civ.color + '33');
+    for (const s of civ.settlements) {
+      const size = Math.max(4, Math.min(20, Math.log2(s.population + 1) * 2));
+      const isSelected = selectedSettlement && selectedSettlement.id === s.id;
+      
+      // Glow
+      const glowRadius = size * 2.5;
+      const gradient = ctx.createRadialGradient(s.position.x, s.position.y, 0, s.position.x, s.position.y, glowRadius);
+      gradient.addColorStop(0, civ.color + '44');
       gradient.addColorStop(1, civ.color + '00');
       ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.arc(civ.center.x, civ.center.y, glowRadius, 0, Math.PI * 2);
+      ctx.arc(s.position.x, s.position.y, glowRadius, 0, Math.PI * 2);
       ctx.fill();
+      
+      // Settlement dot
+      ctx.fillStyle = isSelected ? '#ffffff' : civ.color;
+      ctx.beginPath();
+      ctx.arc(s.position.x, s.position.y, size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      if (isSelected) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      
+      // Label
+      ctx.fillStyle = '#fff';
+      ctx.font = `${size > 8 ? 'bold ' : ''}11px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`${s.tier.emoji} ${s.name}`, s.position.x, s.position.y + size + 3);
+      ctx.font = '10px sans-serif';
+      ctx.fillStyle = '#aaa';
+      ctx.fillText(`${formatPop(s.population)}`, s.position.x, s.position.y + size + 16);
     }
     
-    // Label
-    const age = getAge(civ.ageIndex);
-    ctx.fillStyle = civ.alive ? '#fff' : '#666';
-    ctx.font = 'bold 13px sans-serif';
+    // Civ label at center
+    ctx.fillStyle = civ.color;
+    ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(civ.name, civ.center.x, civ.center.y - 10);
-    ctx.font = '11px sans-serif';
-    ctx.fillText(`${age.emoji} ${age.name}`, civ.center.x, civ.center.y + 8);
-    if (!civ.alive) {
-      ctx.fillStyle = '#e74c3c';
-      ctx.fillText('☠️ Conquered', civ.center.x, civ.center.y + 22);
-    }
+    ctx.fillText(`${civ.name} — ${age.emoji} ${age.name}`, civ.center.x, civ.center.y - 30);
   }
 }
 
 function updateSimUI(events) {
   if (!simulation) return;
   
-  // Turn counter
   document.getElementById('turn-counter').textContent = simulation.turn;
+  document.getElementById('total-pop').textContent = formatPop(simulation.totalPopulation);
   
   // Civ list
   const civList = document.getElementById('civ-list');
   civList.innerHTML = '';
   for (const civ of simulation.civilizations) {
     const age = getAge(civ.ageIndex);
+    const totalPop = civ.settlements.reduce((s, st) => s + st.population, 0);
+    const totalWealth = civ.settlements.reduce((s, st) => s + st.wealthStore, 0);
+    const totalCulture = civ.settlements.reduce((s, st) => s + st.culture, 0);
+    
     const card = document.createElement('div');
     card.className = 'civ-card';
     if (!civ.alive) card.style.opacity = '0.4';
     card.innerHTML = `
       <div class="civ-color" style="background:${civ.color}"></div>
-      <span class="civ-name">${civ.name}</span>
-      <span class="civ-age">${age.emoji} ${age.name}</span>
-      <span style="font-size:11px;color:var(--text-dim)">👥${civ.population} ⚔️${civ.military} 🏛️${civ.culture} 🗺️${civ.territory}</span>
+      <div style="flex:1">
+        <span class="civ-name">${civ.name}</span>
+        <span class="civ-age">${age.emoji} ${age.name}</span>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+          👥 ${formatPop(totalPop)} · 🏘️ ${civ.settlements.length} · 💰 ${totalWealth} · 🏛️ ${totalCulture}
+        </div>
+      </div>
     `;
     civList.appendChild(card);
   }
@@ -242,6 +359,16 @@ function updateSimUI(events) {
     entry.className = `event-entry ${event.type}`;
     entry.innerHTML = `<span class="turn-badge">T${simulation.turn}</span>${event.text}`;
     logList.insertBefore(entry, logList.firstChild);
+    // Keep log manageable
+    while (logList.children.length > 200) {
+      logList.removeChild(logList.lastChild);
+    }
+  }
+  
+  // Update detail panel if open
+  if (selectedSettlement) {
+    const fresh = simulation.allSettlements.find(s => s.id === selectedSettlement.id);
+    if (fresh) showSettlementDetail(fresh);
   }
   
   renderSimMap();
@@ -260,7 +387,6 @@ async function showDiceRolls(rolls) {
     nameEl.textContent = `${civ.name} attempts to advance...`;
     nameEl.style.color = civ.color;
     
-    // Animate roll
     for (let i = 0; i < 10; i++) {
       rollEl.textContent = `${Math.floor(Math.random() * 100)}%`;
       rollEl.style.color = '#fff';
@@ -280,7 +406,7 @@ async function showDiceRolls(rolls) {
     } else {
       rollEl.style.color = '#f39c12';
       resultEl.className = 'dice-result';
-      resultEl.textContent = `No change (stayed at same age)`;
+      resultEl.textContent = `No change`;
     }
     
     await sleep(1200);
@@ -304,14 +430,6 @@ async function doStep() {
   }
   
   updateSimUI(events);
-  
-  if (simulation.isFinished()) {
-    simulation.pause();
-    document.getElementById('btn-play').classList.add('hidden');
-    document.getElementById('btn-pause').classList.add('hidden');
-    worldHistory.addEvent(simulation.turn, 'discovery', '🏁 Simulation complete!');
-    updateSimUI([{ type: 'discovery', text: '🏁 Simulation complete!' }]);
-  }
 }
 
 document.getElementById('btn-step').addEventListener('click', doStep);
@@ -322,8 +440,6 @@ document.getElementById('btn-play').addEventListener('click', () => {
   document.getElementById('btn-pause').classList.remove('hidden');
   
   simulation.play((events) => {
-    const diceRolls = simulation.getDiceRolls();
-    // In auto-play, skip dice animation for speed
     updateSimUI(events);
     
     if (simulation.isFinished()) {
@@ -370,7 +486,8 @@ document.getElementById('btn-history').addEventListener('click', () => {
   timeline.innerHTML = '';
   
   const events = worldHistory.getAllEvents();
-  for (const event of events) {
+  // Show last 200 events
+  for (const event of events.slice(-200)) {
     const entry = document.createElement('div');
     entry.className = 'history-entry';
     entry.innerHTML = `<span class="history-turn">Turn ${event.turn}</span><span>${event.text}</span>`;
@@ -378,7 +495,32 @@ document.getElementById('btn-history').addEventListener('click', () => {
   }
   
   const summary = document.getElementById('history-summary');
-  summary.innerHTML = simulation ? worldHistory.generateSummary(simulation.civilizations) : '';
+  if (simulation) {
+    let html = '<h3>🌍 World Summary</h3>';
+    for (const civ of simulation.civilizations) {
+      const age = getAge(civ.ageIndex);
+      const totalPop = civ.settlements.reduce((s, st) => s + st.population, 0);
+      html += `<div style="margin:12px 0; padding:12px; background:var(--bg); border-radius:8px; border-left:4px solid ${civ.color}">`;
+      html += `<strong style="color:${civ.color}">${civ.name}</strong> — ${age.emoji} ${age.name}<br>`;
+      html += `👥 ${formatPop(totalPop)} · 🏘️ ${civ.settlements.length} settlements<br>`;
+      html += `<div style="margin-top:8px">`;
+      for (const s of civ.settlements) {
+        html += `<div style="margin:4px 0; font-size:13px">${s.tier.emoji} ${s.name} (${formatPop(s.population)})</div>`;
+      }
+      html += `</div>`;
+      // Notable characters
+      if (civ.notableCharacters.length > 0) {
+        html += `<div style="margin-top:8px; font-size:12px; color:var(--text-dim)"><strong>⭐ Notable figures:</strong><br>`;
+        for (const p of civ.notableCharacters.slice(-10)) {
+          const lastDeed = p.deeds.length > 0 ? ` — "${p.deeds[p.deeds.length-1].text}"` : '';
+          html += `${p.roleEmoji} ${p.name} (${p.role})${lastDeed}<br>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+    summary.innerHTML = html;
+  }
   
   showScreen('screen-history');
 });
@@ -395,4 +537,4 @@ window.addEventListener('resize', () => {
 });
 
 // === Init ===
-console.log('🌍 World Story Gen loaded');
+console.log('🌍 World Story Gen loaded — Deep Simulation Mode');
