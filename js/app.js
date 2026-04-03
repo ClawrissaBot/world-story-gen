@@ -536,5 +536,38 @@ window.addEventListener('resize', () => {
   }
 });
 
+// === Preset Loading ===
+function initPresetButtons() {
+  const container = document.getElementById('preset-buttons');
+  for (const preset of PRESETS) {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.innerHTML = `${preset.name}<span class="preset-desc">${preset.description}</span>`;
+    btn.addEventListener('click', () => loadPreset(preset));
+    container.appendChild(btn);
+  }
+}
+
+function loadPreset(preset) {
+  showScreen('screen-create');
+  if (!mapEditor) {
+    mapEditor = new MapEditor('map-canvas');
+  }
+  checkApiKey();
+  
+  // Wait for canvas to be sized, then load regions
+  setTimeout(() => {
+    mapEditor.clear();
+    const scaled = scalePreset(preset, mapEditor.canvas.width, mapEditor.canvas.height);
+    for (const region of scaled) {
+      mapEditor.regions.push(region);
+    }
+    mapEditor.render();
+    document.getElementById('map-status').textContent = `Loaded "${preset.name}" — ${scaled.length} regions. Edit or start the simulation.`;
+  }, 100);
+}
+
+initPresetButtons();
+
 // === Init ===
 console.log('🌍 World Story Gen loaded — Deep Simulation Mode');
