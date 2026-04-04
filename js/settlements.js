@@ -33,13 +33,13 @@ let _settlementId = 0;
 
 function createSettlement(regionName, position, resources, ageIndex) {
   const name = generateSettlementName();
-  const tier = SETTLEMENT_TIERS[0];
   
   // Initial population based on food resources
   const foodCap = calculateFoodCapacity(resources, ageIndex);
   const initPop = Math.min(Math.max(5, Math.floor(foodCap * 0.3)), 20);
+  const tier = getSettlementTier(initPop);
   
-  // Generate initial villagers
+  // Generate initial villagers (never more than population)
   const people = [];
   const numDetailed = Math.min(initPop, 15); // Track up to 15 individually at start
   
@@ -79,14 +79,25 @@ function createSettlement(regionName, position, resources, ageIndex) {
 
 function updateSettlementTier(settlement, events, turn) {
   const newTier = getSettlementTier(settlement.population);
-  if (newTier.name !== settlement.tier.name && settlement.population >= newTier.minPop) {
+  if (newTier.name !== settlement.tier.name) {
     const oldName = settlement.tier.name;
+    const oldIdx = SETTLEMENT_TIERS.indexOf(settlement.tier);
+    const newIdx = SETTLEMENT_TIERS.indexOf(newTier);
     settlement.tier = newTier;
-    events.push({
-      type: 'discovery',
-      text: `🏗️ ${settlement.name} grows from a ${oldName} to a ${newTier.emoji} ${newTier.name}! (pop: ${formatPop(settlement.population)})`,
-      civName: settlement.regionName
-    });
+    
+    if (newIdx > oldIdx) {
+      events.push({
+        type: 'discovery',
+        text: `🏗️ ${settlement.name} grows from a ${oldName} to a ${newTier.emoji} ${newTier.name}! (pop: ${formatPop(settlement.population)})`,
+        civName: settlement.regionName
+      });
+    } else {
+      events.push({
+        type: 'disaster',
+        text: `📉 ${settlement.name} declines from a ${oldName} to a ${newTier.emoji} ${newTier.name} (pop: ${formatPop(settlement.population)})`,
+        civName: settlement.regionName
+      });
+    }
     return true;
   }
   return false;

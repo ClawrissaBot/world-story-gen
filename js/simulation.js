@@ -170,6 +170,10 @@ class Simulation {
   _managePeople(settlement, civ, ageIndex, events) {
     const tier = settlement.tier;
     const maxTracked = tier.maxPeople;
+
+    // Prune dead people every turn to prevent memory leak — keep notables, drop the rest
+    settlement.people = settlement.people.filter(p => p.alive || p.notable);
+
     const alive = settlement.people.filter(p => p.alive);
 
     // Aging & death
@@ -190,13 +194,28 @@ class Simulation {
       }
     }
 
+    // Ensure tracked people never exceed population
+    let livingCount = settlement.people.filter(p => p.alive).length;
+    while (livingCount > settlement.population) {
+      // Kill off excess tracked people (non-notable first)
+      const expendable = settlement.people.find(p => p.alive && !p.notable);
+      if (expendable) {
+        expendable.alive = false;
+      } else {
+        // Even notables must go if pop truly dropped
+        const anyone = settlement.people.find(p => p.alive);
+        if (anyone) anyone.alive = false;
+        else break;
+      }
+      livingCount--;
+    }
+
     // Birth / new arrivals
-    const livingCount = settlement.people.filter(p => p.alive).length;
     const popRatio = settlement.population > 0 ? livingCount / settlement.population : 1;
     
     if (livingCount < maxTracked && popRatio < 0.5) {
-      // Generate new people to fill tracked roster
-      const toGenerate = Math.min(3, maxTracked - livingCount);
+      // Generate new people to fill tracked roster (but never exceed population)
+      const toGenerate = Math.min(3, maxTracked - livingCount, settlement.population - livingCount);
       for (let i = 0; i < toGenerate; i++) {
         const person = generatePerson(ageIndex, settlement.name);
         person.bornTurn = this.turn;
@@ -267,7 +286,7 @@ class Simulation {
     const maxSettlements = 1 + Math.floor(totalPop / 200);
     
     if (civ.settlements.length >= maxSettlements) return;
-    if (civ.settlements.length >= 10) return; // Hard cap for performance
+    if (civ.settlements.length >= 25) return; // Hard cap for performance
     
     // Spawn if largest settlement is big enough
     const largest = civ.settlements.reduce((a, b) => a.population > b.population ? a : b);
